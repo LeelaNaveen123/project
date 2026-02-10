@@ -1,0 +1,78 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'naveen'
+    }
+
+    stages {
+
+        stage('Gitcheckout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/devopsbykrishnareddy/Boardgame.git'
+            }
+        }
+
+        stage('Sonarqube') {
+            steps {
+                sh '''
+                  mvn clean verify sonar:sonar \
+                  -Dsonar.projectKey=naveen \
+                  -Dsonar.host.url=http://3.91.170.228:8085 \
+                  -Dsonar.login=5c375b2b71821a702d73e664948fef5671331587
+                '''
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh 'docker build -t cycle:latest .'
+            }
+        }
+
+        stage('Docker Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'Docker_cd',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                      echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                      docker info | grep Username
+                    '''
+                }
+            }
+        }
+
+        stage('Tag') {
+            steps {
+                sh '''
+                  docker tag cycle:latest leelanaveen123/cycle:v1
+                  docker tag cycle:latest leelanaveen123/cycle:latest
+                '''
+            }
+        }
+
+        stage('Push') {
+            steps {
+                sh '''
+                  docker push leelanaveen123/cycle:v1
+                  docker push leelanaveen123/cycle:latest
+                '''
+            }
+        }
+        stage ('Deployment') {
+            steps {
+                sh 'kubectl apply -f Deployment.yml'
+            }
+        }
+    }
+}
